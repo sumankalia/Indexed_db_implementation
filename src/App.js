@@ -17,8 +17,6 @@ const insertDataInIndexedDb = () => {
     return;
   }
 
-  console.log(idb);
-
   const request = idb.open("test-db", 1);
 
   request.onerror = function (event) {
@@ -31,7 +29,11 @@ const insertDataInIndexedDb = () => {
     const db = request.result;
 
     if (!db.objectStoreNames.contains("userData")) {
-      db.createObjectStore("userData", { keyPath: "id" });
+      const objectStore = db.createObjectStore("userData", { keyPath: "id" });
+
+      objectStore.createIndex("age", "age", {
+        unique: false,
+      });
     }
   };
 
@@ -57,10 +59,58 @@ const App = () => {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [selectedUser, setSelectedUser] = useState({});
+  const [age, setAge] = useState('');
+  const [minAge, setMinAge] = useState('');
+  const [maxAge, setMaxAge] = useState('');
+  
 
   useEffect(() => {
+    insertDataInIndexedDb();
     getAllData();
+    // getAgeWiseData();
   }, []);
+
+  const getAgeWiseData = () => {
+    try {
+      const dbPromise = idb.open("test-db", 1);
+      const filteredRecords = []
+
+        // const keyRangeValue = IDBKeyRange.lowerBound(12);
+        // const keyRangeValue = IDBKeyRange.upperBound(12);
+        const keyRangeValue = IDBKeyRange.bound(parseInt(minAge), parseInt(maxAge), false, false);
+        // If true then these values are not included other wise these will be included.
+        dbPromise.onsuccess = function () {
+          const db = dbPromise.result;
+
+          if (db.objectStoreNames.contains('userData')) {
+            const transaction = db.transaction('userData', "readonly");
+            const objectStore = transaction.objectStore('userData');
+
+            const dataIdIndex = objectStore.index("age");
+            dataIdIndex.openCursor(keyRangeValue).onsuccess = function (event) {
+              const cursor = event.target.result;
+              if (cursor) {
+                if (cursor.value) {
+                  if (parseInt(cursor.value.age) > 0) {
+                    console.log(cursor.value);
+                    filteredRecords.push(cursor.value)
+                  }
+                }
+
+                cursor.continue();
+              }
+            };
+
+            transaction.oncomplete = function (event) {
+              setAllUsers(filteredRecords)
+              db.close();
+            };
+          }
+        };
+    } catch (error) {
+      console.log(error);
+    }
+}
 
   const getAllData = () => {
     const dbPromise = idb.open("test-db", 1);
@@ -100,6 +150,7 @@ const App = () => {
             firstName,
             lastName,
             email,
+            age,
           });
 
           console.log("add");
@@ -111,6 +162,7 @@ const App = () => {
             setFirstName("");
             setLastName("");
             setEmail("");
+            setAge('')
             setAddUser(false);
             getAllData();
             event.preventDefault();
@@ -121,6 +173,7 @@ const App = () => {
             firstName,
             lastName,
             email,
+            age,
           });
           console.log("edit");
 
@@ -132,6 +185,7 @@ const App = () => {
             setFirstName("");
             setLastName("");
             setEmail("");
+            setAge('')
             setEditUser(false);
             getAllData();
             setSelectedUser({});
@@ -167,12 +221,19 @@ const App = () => {
     <div className="row" style={{ padding: 100 }}>
       <div className="col-md-6">
         <div>
+          <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '5px'}}>
+             <input type='number' value={minAge} onChange={e => setMinAge(e.target.value)} className="form-control" style={{width: '200px'}} placeholder="Enter Min Age"/>
+             <input type='number' value={maxAge} onChange={e => setMaxAge(e.target.value)} className="form-control ml-2" style={{width: '200px'}} placeholder="Enter Max Age"/>
+            <button type="button" className="btn btn-info mt-2" onClick={() => getAgeWiseData()}>Filter</button>
+            <button type="button" className="btn btn-secondary mt-2" onClick={() => getAllData()}>Clear</button>
+          </div>
           <button
             className="btn btn-primary float-end mb-2"
             onClick={() => {
               setFirstName("");
               setLastName("");
               setEmail("");
+              setAge('')
               setEditUser(false);
               setAddUser(true);
             }}
@@ -185,6 +246,7 @@ const App = () => {
             <tr>
               <th>First Name</th>
               <th>Last Name</th>
+              <th>Age</th>
               <th>Email</th>
               <th>Actions</th>
             </tr>
@@ -195,6 +257,7 @@ const App = () => {
                 <tr key={user?.id}>
                   <td>{user?.firstName}</td>
                   <td>{user?.lastName}</td>
+                  <td>{user?.age}</td>
                   <td>{user?.email}</td>
                   <td>
                     <button
@@ -204,6 +267,7 @@ const App = () => {
                         setEditUser(true);
                         setSelectedUser(user);
                         setEmail(user?.email);
+                        setAge(user?.age)
                         setFirstName(user?.firstName);
                         setLastName(user?.lastName);
                       }}
@@ -245,6 +309,16 @@ const App = () => {
                 className="form-control"
                 onChange={(e) => setLastName(e.target.value)}
                 value={lastName}
+              />
+            </div>
+            <div className="form-group">
+              <label>Age</label>
+              <input
+                type="number"
+                name="age"
+                className="form-control"
+                onChange={(e) => setAge(e.target.value)}
+                value={age}
               />
             </div>
             <div className="form-group">
